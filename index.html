@@ -124,10 +124,6 @@ td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 .bar{height:10px;border-radius:5px;background:var(--surface2);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .5s}
 .bar.b i{background:var(--mark)}
-.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-.how section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
-.how ul{margin:0;padding-left:18px}
-.how li{margin-bottom:6px}
 code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:1px 6px;border-radius:5px}
 .check{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:6px 0 4px}
 .check p{margin:0 0 6px}
@@ -316,7 +312,6 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" aria-selected="true" data-tab="translate">Translate</button>
     <button role="tab" aria-selected="false" data-tab="eval">Evaluate</button>
-    <button role="tab" aria-selected="false" data-tab="how">How it works</button>
   </nav>
 
   <!-- TRANSLATE -->
@@ -409,50 +404,6 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
     <div id="evalOut" hidden>
       <div class="summary" id="evalSummary"></div>
       <div class="scroll"><table id="evalTable"></table></div>
-    </div>
-  </section>
-
-  <!-- HOW IT WORKS -->
-  <section class="panel" id="tab-how" hidden>
-    <div class="how">
-      <section>
-        <h2>The pipeline</h2>
-        <ul>
-          <li><b>Stage 1, grammar.</b> A language model gets the sentence plus ASL rules and worked examples. It returns gloss tokens and a list of the changes it made.</li>
-          <li><b>Stage 2, self-check.</b> A reviewer call reads the gloss back into English, checks the meaning survived, lists grammar problems and returns a corrected gloss. This is a generate-then-critique loop.</li>
-          <li><b>Stage 3, sign planning.</b> Another call turns every gloss token into structured sign details: handshape, orientation, location, movement, facial expression.</li>
-          <li><b>Stage 4, preview.</b> Code maps location and movement to a moving dot on a body outline.</li>
-          <li><b>Extras.</b> A streaming tutor chat, AI-chosen handshapes drawn from a library of standard ASL shapes with a confidence rating, AI-written practice quizzes, and an AI judge in the evaluation.</li>
-        </ul>
-      </section>
-      <section>
-        <h2>Design choices</h2>
-        <ul>
-          <li>Structured JSON between stages, so every stage can be tested on its own.</li>
-          <li>The model picks a handshape from a fixed list of standard ASL shapes and my code draws it. Letting a model draw hands freehand produced unreliable shapes, so it only chooses.</li>
-          <li>Rules and few-shot examples are compared against a plain prompt on the Evaluate tab.</li>
-          <li>If a model response is malformed or incomplete, the app fills the gaps and keeps going. Unknown words fall back to fingerspelling.</li>
-          <li>The model never sees user data beyond the sentence typed.</li>
-        </ul>
-      </section>
-      <section>
-        <h2>Limitations</h2>
-        <ul>
-          <li>The preview is a schematic, not video of a signer. Sign details come from the model's knowledge and can be wrong, so they should be checked before real use.</li>
-          <li>Gloss is a written approximation. It cannot show facial grammar, body shift or speed, which carry real meaning in ASL.</li>
-          <li>One sentence at a time, with no memory of earlier ones.</li>
-          <li>Built with input from no Deaf signers yet. Any real deployment should involve the Deaf community.</li>
-        </ul>
-      </section>
-      <section>
-        <h2>Future scope</h2>
-        <ul>
-          <li>Retrieve real sign video from a licensed dataset and match words by meaning with embeddings.</li>
-          <li>Drive a 3D avatar from pose keypoints instead of a dot.</li>
-          <li>Add the reverse direction: camera, pose detection, then ASL to English.</li>
-          <li>Evaluate with fluent signers and a published gloss corpus.</li>
-        </ul>
-      </section>
     </div>
   </section>
 </div>
@@ -597,7 +548,7 @@ Return JSON only, in exactly this shape:
 document.querySelectorAll("nav.tabs button").forEach(b=>{
   b.addEventListener("click",()=>{
     document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b ? "true":"false"));
-    ["translate","eval","how"].forEach(t=>{ $("tab-"+t).hidden = (t!==b.dataset.tab); });
+    ["translate","eval"].forEach(t=>{ $("tab-"+t).hidden = (t!==b.dataset.tab); });
   });
 });
 
