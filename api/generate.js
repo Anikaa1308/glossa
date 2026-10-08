@@ -5,6 +5,8 @@ const MODELS = {
   quick: "gemini-3.5-flash-lite",
   default: "gemini-3.8-flash",
 };
+// Tried in order when Google answers 503 (overloaded). All are on the free tier.
+const FALLBACK = "gemini-3.1-flash-lite";
 
 const MAX_TURNS = 40;
 const MAX_CHARS = 200000;
@@ -70,19 +72,24 @@ module.exports = async (req, res) => {
   const payload = { contents, generationConfig: { maxOutputTokens: 8192 } };
   if (body.json === true) payload.generationConfig.responseMimeType = "application/json";
 
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/" + model +
-    (stream ? ":streamGenerateContent?alt=sse" : ":generateContent");
-
+  const order = [model, model, FALLBACK].filter((m, i, a) => i === 1 || a.indexOf(m) === i);
   let upstream;
-  try {
-    upstream = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify(payload),
-    });
-  } catch (e) {
-    return fail(res, 502, "Could not reach the model service.");
+  for (let i = 0; i < order.length; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1500));
+    const url =
+      "https://generativelanguage.googleapis.com/v1beta/models/" + order[i] +
+      (stream ? ":streamGenerateContent?alt=sse" : ":generateContent");
+    try {
+      upstream = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      if (i === order.length - 1) return fail(res, 502, "Could not reach the model service.");
+      continue;
+    }
+    if (upstream.status !== 503) break;
   }
 
   if (!stream || !upstream.ok) {
