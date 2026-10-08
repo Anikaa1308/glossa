@@ -738,7 +738,8 @@ function handNode(id,dir,palm){
 const LOCS=Object.keys(ZONES), MOVES=["tap","forward","away","toward","arc","circle","up","down","wiggle","hold","side-to-side"];
 function cleanTok(t){ return String(t).toUpperCase().replace(/[^A-Z0-9#\-]/g,"").replace(/^-+|-+$/g,""); }
 function normalizeGloss(g){
-  let arr = Array.isArray(g) ? g : String(g||"").split(/\s+/);
+  // Split every item on spaces too: models sometimes return ["WATER ME NEED HELP"] as one string.
+  let arr = (Array.isArray(g) ? g : [g]).flatMap(x => String(x==null?"":x).split(/\s+/));
   return arr.map(cleanTok).filter(Boolean);
 }
 function repairSigns(gloss, raw){
