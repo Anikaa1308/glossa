@@ -169,8 +169,8 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
 (function(){
   if (window.claude) return;
   var PROVIDERS = {
-    proxy:    { label:"Glossa server", models:{ quick:"gemini-2.5-flash-lite", default:"gemini-2.5-flash", complex:"gemini-2.5-flash" } },
-    gemini:   { label:"Google Gemini (free tier)", models:{ quick:"gemini-2.5-flash-lite", default:"gemini-2.5-flash", complex:"gemini-2.5-flash" } },
+    proxy:    { label:"Glossa server", models:{ quick:"gemini-3.5-flash-lite", default:"gemini-3.8-flash", complex:"gemini-3.8-flash" } },
+    gemini:   { label:"Google Gemini (free tier)", models:{ quick:"gemini-3.5-flash-lite", default:"gemini-3.8-flash", complex:"gemini-3.8-flash" } },
     anthropic:{ label:"Anthropic (paid)", models:{ quick:"claude-haiku-4-5-20251001", default:"claude-sonnet-5-5", complex:"claude-sonnet-5-5" } }
   };
   function ss(k,v){ try{ if(v===undefined) return sessionStorage.getItem(k)||""; sessionStorage.setItem(k,v); return v; }catch(e){ return ""; } }

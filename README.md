@@ -50,7 +50,7 @@ README.md  LICENSE  .gitignore
 
 ## Models
 
-Set in `api/generate.js`: Fast uses `gemini-2.5-flash-lite`, Accurate uses `gemini-2.5-flash`. Model names change over time; if you see a model-not-found error under **Details** on the page, update the names there and redeploy.
+Set in `api/generate.js`: Fast uses `gemini-3.5-flash-lite`, Accurate uses `gemini-3.8-flash`. Model names change over time; if you see a model-not-found error under **Details** on the page, update the names there and redeploy.
 
 ## License
 

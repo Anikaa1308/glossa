@@ -2,8 +2,8 @@
 // The API key lives in the GEMINI_API_KEY environment variable and never reaches the browser.
 
 const MODELS = {
-  quick: "gemini-2.5-flash-lite",
-  default: "gemini-2.5-flash",
+  quick: "gemini-3.5-flash-lite",
+  default: "gemini-3.8-flash",
 };
 
 const MAX_TURNS = 40;
