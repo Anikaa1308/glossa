@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Glossa: English to ASL with generative AI</title>
+<meta name="description" content="Glossa turns English into ASL gloss with generative AI, plans each sign, and previews it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+.keybar{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin:0 0 22px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.keybar input{flex:1;min-width:220px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;background:var(--bg);font:inherit;color:inherit}
+.keybar small{color:var(--muted);flex-basis:100%}
+
+:root{
+  --bg:#F2F4F7; --surface:#FFFFFF; --surface2:#E9EDF3; --ink:#0F1B2A; --muted:#566478;
+  --line:#D3DAE4; --accent:#2447F5; --on-accent:#FFFFFF; --mark:#FFD23F; --on-mark:#1A1500;
+  --ok:#0B7A54; --bad:#B8302A;
+  --sans:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1320; --surface:#131E2F; --surface2:#1B2940; --ink:#E8EDF5; --muted:#94A2B6;
+    --line:#26354D; --accent:#86A0FF; --on-accent:#0B1320; --ok:#4FD1A0; --bad:#FF8A80;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1320; --surface:#131E2F; --surface2:#1B2940; --ink:#E8EDF5; --muted:#94A2B6;
+  --line:#26354D; --accent:#86A0FF; --on-accent:#0B1320; --ok:#4FD1A0; --bad:#FF8A80;
+}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.55}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 72px}
+h1{font-size:clamp(2.4rem,6vw,4.2rem);line-height:1.02;margin:0 0 14px;font-weight:700;letter-spacing:-.025em;max-width:18ch}
+h2{font-size:1.25rem;margin:0 0 10px;font-weight:700}
+h3{font-size:1.02rem;margin:0 0 6px;font-weight:700}
+p{margin:0 0 12px;max-width:68ch}
+.lede{color:var(--muted);font-size:1.08rem;max-width:56ch;margin-bottom:22px}
+button,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+nav.tabs{display:inline-flex;gap:4px;background:var(--surface2);border-radius:999px;padding:4px;margin-bottom:26px;overflow-x:auto;max-width:100%}
+nav.tabs button{background:none;border:0;padding:8px 18px;cursor:pointer;color:var(--muted);font-weight:500;border-radius:999px;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--on-accent);background:var(--accent);font-weight:700}
+.panel[hidden]{display:none}
+
+.composer{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:0 2px 0 var(--line)}
+textarea{width:100%;min-height:96px;resize:vertical;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg);font-size:1.3rem;line-height:1.4}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+.spacer{flex:1}
+.btn{background:var(--accent);color:var(--on-accent);border:0;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:500}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chip{background:var(--surface2);border:0;border-radius:999px;padding:6px 14px;cursor:pointer;font-size:.92rem}
+.chip:hover{background:var(--line)}
+.count{color:var(--muted);font-size:.88rem;font-variant-numeric:tabular-nums}
+label.sel{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:.92rem}
+select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0}
+.stage-pill{position:relative;border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 36px;background:var(--surface);font-size:.92rem}
+.stage-pill::before{content:"";position:absolute;left:14px;top:18px;width:10px;height:10px;border-radius:50%;background:var(--line)}
+.stage-pill[data-state="active"]::before{background:var(--accent)}
+.stage-pill[data-state="done"]::before{background:var(--ok)}
+.stage-pill[data-state="error"]::before{background:var(--bad)}
+.stage-pill b{display:block}
+.stage-pill span{color:var(--muted)}
+.stage-pill[data-state="active"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.stage-pill[data-state="active"] span::after{content:" …"}
+.stage-pill[data-state="done"] span{color:var(--ok)}
+.stage-pill[data-state="error"] span{color:var(--bad)}
+
+.notice{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:14px 16px;margin:16px 0;color:var(--muted)}
+.notice.err{border-color:var(--bad);color:var(--ink)}
+
+.gloss{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 14px;padding:18px;background:var(--surface);border:1px solid var(--line);border-radius:18px}
+.tok{font-family:var(--mono);font-weight:700;font-size:1.5rem;background:var(--mark);color:var(--on-mark);border:0;border-radius:8px;padding:8px 16px;cursor:pointer;transform:rotate(-.6deg)}
+.tok:nth-child(even){transform:rotate(.5deg)}
+.tok[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:2px}
+.changes{margin:0 0 6px;padding-left:20px;color:var(--muted)}
+.changes li{margin-bottom:3px}
+
+.grid{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:22px;margin-top:18px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.pipeline{grid-template-columns:1fr 1fr}}
+.stage-box{background:#0E1826;border:1px solid #22324A;border-radius:20px;padding:12px}
+svg#stage{width:100%;height:auto;display:block}
+.body-fill{fill:#192840;stroke:#33486A;stroke-width:1.5}
+.zone{fill:none;stroke:#4A628A;stroke-dasharray:2 3}
+#trail{fill:none;stroke:#FFD23F;stroke-width:2;stroke-dasharray:3 4;opacity:.7}
+#handA{fill:#FFD23F} #handB{fill:#FFD23F;opacity:.5}
+#ring{fill:none;stroke:#FFD23F;stroke-width:2}
+.stage-caption{font-size:.82rem;color:#93A4BF;margin:8px 4px 2px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.detail{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.detail .big{font-family:var(--mono);font-weight:700;font-size:1.8rem;margin:0 0 6px}
+dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:12px 0 0}
+dl.facts dt{color:var(--muted)} dl.facts dd{margin:0}
+.letters{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.letters span{font-family:var(--mono);font-weight:700;width:2.2rem;height:2.6rem;display:grid;place-items:center;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.letters span.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:20px}
+.card{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer}
+.card[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.card b{font-family:var(--mono);display:block;margin-bottom:2px}
+.card small{color:var(--muted);display:block;line-height:1.35}
+
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:.92rem}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;background:var(--surface2)}
+td.m{font-family:var(--mono);font-size:.85rem}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.good{color:var(--ok);font-weight:700}.poor{color:var(--bad);font-weight:700}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:18px 0}
+.sumcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.meter{display:grid;grid-template-columns:7.5rem 1fr 3.2rem;gap:10px;align-items:center;margin:8px 0;font-size:.92rem}
+.bar{height:10px;border-radius:5px;background:var(--surface2);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .5s}
+.bar.b i{background:var(--mark)}
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.how section{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.how ul{margin:0;padding-left:18px}
+.how li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:1px 6px;border-radius:5px}
+.check{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:6px 0 4px}
+.check p{margin:0 0 6px}
+.check ul{margin:0;padding-left:20px;color:var(--muted)}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:.85rem;font-weight:700;margin-left:6px}
+.tag.ok{background:var(--ok);color:#fff}.tag.rev{background:var(--mark);color:var(--on-mark)}
+.tutor{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.msgrow{margin:10px 0;padding:10px 14px;border-radius:10px;max-width:70ch;white-space:pre-wrap}
+.msgrow.u{background:var(--surface2);margin-left:auto;width:fit-content}
+.msgrow.a{background:var(--bg);border:1px solid var(--line)}
+.tutor input[type=text]{flex:1;min-width:200px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--bg);font:inherit;color:inherit}
+.qblock{margin:16px 0}
+.opt{display:block;width:100%;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:6px 0;cursor:pointer}
+.opt[data-r="right"]{border-color:var(--ok);box-shadow:inset 0 0 0 1px var(--ok)}
+.opt[data-r="wrong"]{border-color:var(--bad);box-shadow:inset 0 0 0 1px var(--bad)}
+.why{color:var(--muted);margin:4px 0 0}
+.hand{margin-top:16px}
+.hand svg{width:190px;height:auto;display:block;border:1px solid var(--line);border-radius:12px;background:var(--bg);margin:8px 0 6px}
+.hand small{color:var(--muted);display:block;max-width:46ch}
+.hp{fill:var(--surface2);stroke:var(--muted);stroke-width:2;stroke-linejoin:round}
+.hcurl{fill:var(--line);stroke:var(--muted);stroke-width:2}
+.hhole{fill:var(--bg);stroke:var(--muted);stroke-width:2}
+.cb{fill:none;stroke:var(--muted);stroke-width:19;stroke-linecap:round}
+.ci{fill:none;stroke:var(--surface2);stroke-width:15;stroke-linecap:round}
+.hl{fill:none;stroke:var(--muted);stroke-width:1.5;opacity:.7;stroke-linecap:round}
+.tag.med{background:var(--surface2);color:var(--ink)}
+.tag.low{background:var(--bad);color:#fff}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}.tok{transform:none!important}}
+</style>
+</head>
+<body>
+<script>
+/* ===== Standalone runtime (GitHub Pages build) =====
+   Inside Claude the page gets window.claude from the viewer. On GitHub Pages it does not,
+   so this shim provides the same two capabilities ("sample" and "downloads") using the
+   Anthropic Messages API called straight from the browser with the user's own API key.
+   The key is kept in this tab's sessionStorage only and is sent only to api.anthropic.com. */
+(function(){
+  if (window.claude) return;
+  var MODELS = { quick: "claude-haiku-4-5-20251001", default: "claude-sonnet-5-5", complex: "claude-sonnet-5-5" };
+  var KEY_NAME = "glossa_api_key";
+  function getKey(){ try{ return sessionStorage.getItem(KEY_NAME)||""; }catch(e){ return ""; } }
+  function setKey(k){ try{ sessionStorage.setItem(KEY_NAME,k); }catch(e){} }
+  function err(code,message,text){ var e={code:code,message:message}; if(text) e.text=text; return e; }
+
+  async function call(input, opts){
+    opts = opts||{};
+    var key = getKey();
+    if(!key) throw err("not_granted","No API key set");
+    var messages = typeof input==="string" ? [{role:"user",content:input}] : input.map(function(t){return {role:t.role,content:t.content};});
+    // merge consecutive same-role turns (the app sends a context turn followed by the user's turn)
+    var merged=[]; messages.forEach(function(m){ var l=merged[merged.length-1]; if(l && l.role===m.role) l.content+="\n\n"+m.content; else merged.push({role:m.role,content:m.content}); });
+    var body = { model: MODELS[opts.modelTier]||MODELS.default, max_tokens: 4096, messages: merged, stream: !!opts.onText };
+    var res;
+    try{
+      res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST", signal: opts.signal,
+        headers:{ "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      if(e && e.name==="AbortError") throw err("cancelled","Aborted");
+      throw err("upstream_error","Network error: "+(e&&e.message));
+    }
+    if(!res.ok){
+      var code = res.status===401||res.status===403 ? "not_granted" : res.status===429 ? "rate_limited" : res.status===413 ? "prompt_too_large" : "upstream_error";
+      throw err(code,"HTTP "+res.status);
+    }
+    var text="", truncated=false;
+    if(!opts.onText){
+      var data = await res.json();
+      text = (data.content||[]).map(function(b){return b.type==="text"?b.text:"";}).join("");
+      truncated = data.stop_reason==="max_tokens";
+    }else{
+      var reader=res.body.getReader(), dec=new TextDecoder(), buf="";
+      try{
+        for(;;){
+          var r=await reader.read(); if(r.done) break;
+          buf+=dec.decode(r.value,{stream:true});
+          var lines=buf.split("\n"); buf=lines.pop();
+          for(var i=0;i<lines.length;i++){
+            var ln=lines[i].trim(); if(ln.indexOf("data:")!==0) continue;
+            var d=ln.slice(5).trim(); if(!d||d==="[DONE]") continue;
+            var ev; try{ ev=JSON.parse(d); }catch(x){ continue; }
+            if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){ text+=ev.delta.text; opts.onText({text:text,delta:ev.delta.text}); }
+            if(ev.type==="message_delta" && ev.delta && ev.delta.stop_reason==="max_tokens") truncated=true;
+          }
+        }
+      }catch(e){
+        if(e && e.name==="AbortError") throw err("cancelled","Aborted",text);
+        throw err("upstream_error","Stream interrupted",text);
+      }
+    }
+    if(!text.trim()) throw err("empty_completion","Empty answer");
+    return { text:text, truncated:truncated, modelTierApplied: opts.modelTier||"default" };
+  }
+
+  function parseJson(text){
+    var t=String(text).replace(/```json|```/g,"").trim();
+    try{ return JSON.parse(t); }catch(e){}
+    var a=t.indexOf("{"), b=t.lastIndexOf("}");
+    if(a>=0 && b>a){ try{ return JSON.parse(t.slice(a,b+1)); }catch(e){} }
+    var c=t.indexOf("["), d=t.lastIndexOf("]");
+    if(c>=0 && d>c){ try{ return JSON.parse(t.slice(c,d+1)); }catch(e){} }
+    throw err("invalid_json","No parseable JSON",text);
+  }
+
+  var sample = function(input,opts){ return call(input,opts); };
+  sample.json = async function(input,opts){ var r=await call(input,opts); return parseJson(r.text); };
+  sample.limits = async function(){ return { maxPromptBytes: 262144 }; };
+
+  var downloads = { save: async function(req){
+    var blob = new Blob([req.data],{type:"application/json"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=req.filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    return { status:"saved" };
+  }};
+
+  window.claude = { use: async function(name){ return name==="sample" ? sample : (name==="downloads" ? downloads : null); } };
+  window.__glossaStandalone = { getKey:getKey, setKey:setKey, models:MODELS };
+})();
+</script>
+<div class="wrap">
+  <header>
+    <div style="display:inline-block;font-family:var(--mono);font-weight:700;font-size:1.25rem;background:var(--mark);color:var(--on-mark);border-radius:6px;padding:3px 12px;margin-bottom:18px;transform:rotate(-.6deg)">GLOSSA</div>
+    <h1>Type a sentence. See how ASL says it.</h1>
+    <p class="lede">ASL has its own grammar, so a word-for-word swap gets it wrong. Glossa uses generative AI to restructure the sentence into ASL gloss, then plans each sign's handshape, location and movement and plays it back.</p>
+  </header>
+
+  <div class="keybar" id="keybar" hidden>
+    <label for="apikey"><b>Anthropic API key</b></label>
+    <input type="password" id="apikey" autocomplete="off" placeholder="sk-ant-..." aria-describedby="keynote">
+    <button class="btn" id="savekey" type="button">Save for this tab</button>
+    <small id="keynote">Your key stays in this browser tab (sessionStorage) and is sent only to api.anthropic.com. It is never stored on a server or in the repository. Use a key with a low spending limit.</small>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" aria-selected="true" data-tab="translate">Translate</button>
+    <button role="tab" aria-selected="false" data-tab="eval">Evaluate</button>
+    <button role="tab" aria-selected="false" data-tab="how">How it works</button>
+  </nav>
+
+  <!-- TRANSLATE -->
+  <section class="panel" id="tab-translate">
+    <div class="composer">
+      <textarea id="input" maxlength="300" aria-label="English sentence" placeholder="Type an English sentence, for example: The teacher will see you tomorrow">The teacher will see you tomorrow</textarea>
+      <div class="row">
+        <button class="btn" id="go">Translate</button>
+        <button class="btn ghost" id="stop" hidden>Stop</button>
+        <label class="sel">Mode
+          <select id="tier"><option value="quick">Fast</option><option value="default">Accurate</option></select>
+        </label>
+        <label class="sel"><input type="checkbox" id="check" checked> AI self-check</label>
+        <span class="spacer"></span>
+        <span class="count" id="count">0/300</span>
+      </div>
+      <div class="chips" id="examples"></div>
+    </div>
+
+    <div class="pipeline" aria-live="polite">
+      <div class="stage-pill" id="p1" data-state="idle"><b>English to ASL gloss</b><span>Waiting</span></div>
+      <div class="stage-pill" id="p2" data-state="idle"><b>AI self-check</b><span>Waiting</span></div>
+      <div class="stage-pill" id="p3" data-state="idle"><b>Sign planning</b><span>Waiting</span></div>
+      <div class="stage-pill" id="p4" data-state="idle"><b>Signing preview</b><span>Waiting</span></div>
+    </div>
+
+    <div id="msg"></div>
+
+    <div id="result" hidden>
+      <h2>ASL gloss</h2>
+      <div class="gloss" id="gloss"></div>
+      <ul class="changes" id="changes"></ul>
+      <div class="check" id="checkOut" hidden></div>
+      <div class="grid">
+        <div>
+          <div class="stage-box">
+            <svg id="stage" viewBox="0 0 200 260" role="img" aria-label="Schematic of signing space: head and torso with a moving dot showing where the hand goes">
+              <path class="body-fill" d="M34 258 L34 150 Q34 112 72 108 L128 108 Q166 112 166 150 L166 258 Z"/>
+              <rect class="body-fill" x="88" y="84" width="24" height="28" rx="6"/>
+              <ellipse class="body-fill" cx="100" cy="55" rx="24" ry="29"/>
+              <g id="zones"></g>
+              <polyline id="trail" points=""/>
+              <circle id="ring" cx="0" cy="0" r="0" opacity="0"/>
+              <circle id="handB" r="8" cx="-20" cy="-20"/>
+              <circle id="handA" r="9" cx="-20" cy="-20"/>
+            </svg>
+            <p class="stage-caption">Schematic only. The dot shows where the hand starts and how it moves. It is not a real signer.</p>
+          </div>
+          <div class="controls">
+            <button class="btn" id="playAll">Play all</button>
+            <button class="btn ghost" id="pause">Pause</button>
+            <button class="btn ghost" id="export">Save JSON</button>
+          </div>
+        </div>
+        <div class="detail" id="detail" aria-live="polite"></div>
+      </div>
+      <div class="cards" id="cards"></div>
+
+      <section class="tutor">
+        <h2>Ask the ASL tutor</h2>
+        <p style="color:var(--muted)">A chat assistant that knows this sentence, its gloss and every sign detail above. Answers are AI-generated, so check important points with a fluent signer.</p>
+        <div id="chatlog" aria-live="polite"></div>
+        <div class="row">
+          <input type="text" id="chatin" maxlength="300" aria-label="Question for the tutor" placeholder="Ask why a sign or word order was chosen">
+          <button class="btn" id="chatsend" type="button">Ask</button>
+          <button class="btn ghost" id="chatstop" type="button" hidden>Stop</button>
+        </div>
+        <div class="chips" id="chatsug"></div>
+      </section>
+
+      <section class="tutor">
+        <h2>Practice</h2>
+        <p style="color:var(--muted)">The AI writes three questions about this translation.</p>
+        <button class="btn ghost" id="quizBtn" type="button">Quiz me</button>
+        <div id="quizOut" aria-live="polite"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- EVALUATE -->
+  <section class="panel" id="tab-eval" hidden>
+    <p class="lede">This runs 15 test sentences through two prompting strategies, scores each result against a reference gloss with code, and then asks a separate AI call to judge both. It is the evidence for your report: which approach gives better ASL grammar.</p>
+    <div class="row" style="margin-top:0">
+      <button class="btn" id="runEval">Run evaluation</button>
+      <button class="btn ghost" id="stopEval" hidden>Stop</button>
+      <button class="btn ghost" id="exportEval" hidden>Save results</button>
+      <span class="count" id="evalStatus"></span>
+    </div>
+    <div class="notice" style="margin-top:14px">The reference glosses were written for this demo from standard ASL grammar rules. Real ASL has more than one correct gloss for most sentences, so treat the scores as relative. For final results, replace the references with ones checked by a fluent signer or a published dataset.</div>
+    <div id="evalOut" hidden>
+      <div class="summary" id="evalSummary"></div>
+      <div class="scroll"><table id="evalTable"></table></div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="panel" id="tab-how" hidden>
+    <div class="how">
+      <section>
+        <h2>The pipeline</h2>
+        <ul>
+          <li><b>Stage 1, grammar.</b> A language model gets the sentence plus ASL rules and worked examples. It returns gloss tokens and a list of the changes it made.</li>
+          <li><b>Stage 2, self-check.</b> A reviewer call reads the gloss back into English, checks the meaning survived, lists grammar problems and returns a corrected gloss. This is a generate-then-critique loop.</li>
+          <li><b>Stage 3, sign planning.</b> Another call turns every gloss token into structured sign details: handshape, orientation, location, movement, facial expression.</li>
+          <li><b>Stage 4, preview.</b> Code maps location and movement to a moving dot on a body outline.</li>
+          <li><b>Extras.</b> A streaming tutor chat, AI-chosen handshapes drawn from a library of standard ASL shapes with a confidence rating, AI-written practice quizzes, and an AI judge in the evaluation.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Design choices</h2>
+        <ul>
+          <li>Structured JSON between stages, so every stage can be tested on its own.</li>
+          <li>The model picks a handshape from a fixed list of standard ASL shapes and my code draws it. Letting a model draw hands freehand produced unreliable shapes, so it only chooses.</li>
+          <li>Rules and few-shot examples are compared against a plain prompt on the Evaluate tab.</li>
+          <li>If a model response is malformed or incomplete, the app fills the gaps and keeps going. Unknown words fall back to fingerspelling.</li>
+          <li>The model never sees user data beyond the sentence typed.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Limitations</h2>
+        <ul>
+          <li>The preview is a schematic, not video of a signer. Sign details come from the model's knowledge and can be wrong, so they should be checked before real use.</li>
+          <li>Gloss is a written approximation. It cannot show facial grammar, body shift or speed, which carry real meaning in ASL.</li>
+          <li>One sentence at a time, with no memory of earlier ones.</li>
+          <li>Built with input from no Deaf signers yet. Any real deployment should involve the Deaf community.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Future scope</h2>
+        <ul>
+          <li>Retrieve real sign video from a licensed dataset and match words by meaning with embeddings.</li>
+          <li>Drive a 3D avatar from pose keypoints instead of a dot.</li>
+          <li>Add the reverse direction: camera, pose detection, then ASL to English.</li>
+          <li>Evaluate with fluent signers and a published gloss corpus.</li>
+        </ul>
+      </section>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- helpers ---------- */
+const $ = (id)=>document.getElementById(id);
+const el = (tag, attrs, ...kids)=>{
+  const n=document.createElement(tag);
+  if(attrs) for(const k in attrs){ if(k==="class") n.className=attrs[k]; else if(k==="text") n.textContent=attrs[k]; else n.setAttribute(k,attrs[k]); }
+  kids.forEach(k=>n.append(k)); return n;
+};
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let sample=null, downloads=null;
+
+const ERR_COPY = {
+  not_granted:"The AI request was refused. Check that your API key is saved above and valid, or allow access if you are in Claude.",
+  sampling_disabled:"Claude is not available for this account.",
+  not_declared:"This page is missing its AI permission.",
+  capability_disabled:"AI is not available in this view.",
+  rate_limited:"Too many requests or usage limit reached. Wait a moment and try again.",
+  session_expired:"Your session expired. Sign in again.",
+  refused:"The model declined this input. Try a different sentence.",
+  empty_completion:"The model returned nothing. Try again with a simpler sentence.",
+  invalid_json:"The model's answer was not in the expected format. Try again.",
+  prompt_too_large:"That input is too long.",
+  upstream_error:"The AI service had a temporary problem. Try again."
+};
+const errText = (e)=> (e && ERR_COPY[e.code]) || "Something went wrong. Try again.";
+
+/* ---------- prompts ---------- */
+const RULES = `You are an ASL linguist. Convert English to ASL gloss.
+
+Gloss conventions:
+- Signs are UPPERCASE English words. Use hyphens for single signs that need several English words (THANK-YOU, LAST-WEEK).
+- Pronouns: ME, YOU, WE, IX-3 for he/she/it/they (a pointing sign). Possessives: MY, YOUR.
+- Names and words with no standard sign are fingerspelled, written as #WORD (for example #MARIA).
+
+Grammar rules:
+1. Time reference goes first (YESTERDAY, TOMORROW, NOW, LAST-WEEK). Tense is carried by the time sign, so drop "will", "did", "have" and similar.
+2. Drop articles (a, an, the), "to be" verbs (am, is, are, was, were), the "to" before verbs, and "do/does/did" helpers.
+3. Use topic-comment order when natural: name the topic or object first, then comment on it.
+4. Question words (WHAT, WHERE, WHEN, WHO, WHY, HOW) go at the END.
+5. Negation: put NOT (or NEVER, NONE) after the verb or predicate.
+6. Yes/no questions keep the statement word order; the question is shown by raised eyebrows, which you describe in "nmm".
+7. Keep the gloss short. Do not translate filler words such as "very" unless needed.
+
+Examples (these are not test items):
+- "I will go to the park tomorrow" -> TOMORROW ME GO PARK
+- "Where do you live?" -> YOU LIVE WHERE
+- "She does not eat meat" -> IX-3 EAT MEAT NOT
+- "My friend bought a new car last week" -> LAST-WEEK MY FRIEND BUY CAR NEW
+- "Can you help me?" -> YOU CAN HELP ME`;
+
+function promptGloss(text){
+  return `${RULES}
+
+Convert this sentence:
+"${text.replace(/"/g,"'")}"
+
+Return JSON only, no prose, in exactly this shape:
+{"gloss":["TOKEN","TOKEN"],"sentence_type":"statement | yes-no question | wh-question | command | negation","rules_applied":["short plain-language note about each change you made, for example: Moved TOMORROW to the front"],"nmm":"facial expression or head movement for the whole sentence, or empty string"}`;
+}
+
+const HS_LEGEND = `A: fist, thumb resting beside the fingers
+S: fist, thumb across the front of the fingers
+B: flat hand, fingers together, thumb across the palm
+5: open hand, fingers spread, thumb out
+1: index finger up, other fingers closed
+L: index finger up and thumb out, other fingers closed
+Y: thumb and pinky out, other fingers closed
+I: pinky up, other fingers closed
+V: index and middle fingers up and spread, others closed
+W: index, middle and ring fingers up and spread, thumb holds the pinky
+3: thumb, index and middle fingers out, others closed
+4: four fingers up and spread, thumb tucked
+ILY: thumb, index finger and pinky out, middle and ring closed
+HORNS: index finger and pinky up, middle and ring closed, thumb across
+X: index finger hooked, others closed
+C: all fingers and thumb curved like the letter C
+O: all fingertips curved to touch the thumb
+F: thumb and index fingertip touch, the other three fingers up
+CLAW: fingers bent and spread like a claw
+BENT-B: flat hand bent at the knuckles, fingers together
+NONE: no standard handshape above fits this sign`;
+
+function promptPlan(text, gloss){
+  return `You are an ASL instructor. For each gloss token below, describe how the sign is produced, using standard ASL citation forms. Be concise and accurate. If you are unsure about any detail, lower the confidence instead of guessing.
+
+English: "${text.replace(/"/g,"'")}"
+Gloss tokens in order: ${JSON.stringify(gloss)}
+
+Rules:
+- Return exactly one entry per token, in the same order, with the same token text.
+- Tokens starting with # are fingerspelled: set "fingerspell" to true, "handshape_id" to "NONE", location "neutral", movement "hold".
+- IX-3 is a point with the index finger toward a side (handshape 1).
+- "handshape_id" must be exactly one id from this list, choosing the closest standard handshape for the dominant hand at the start of the sign:
+${HS_LEGEND}
+- "finger_direction" is where the fingers point at the start: up, down, left, right, forward or toward-body.
+- "palm" is where the palm faces at the start: out (away from the signer), in (toward the signer), up, down, left or right.
+- "location" must be one of: forehead, face, chin, neck, shoulder, chest, belly, neutral, side.
+- "movement" must be one of: tap, forward, away, toward, arc, circle, up, down, wiggle, hold, side-to-side.
+- "hands" is 1 or 2.
+- "confidence" is high, medium or low: how sure you are that the handshape, location and movement match the standard sign. Use low when you are guessing.
+
+Return JSON only, in exactly this shape:
+{"signs":[{"gloss":"TOKEN","hands":1,"handshape_id":"B","handshape":"short plain name, for example flat hand","finger_direction":"up","palm":"out","orientation":"palm direction in words","location":"chin","movement":"tap","nmm":"facial expression or mouth shape, or empty string","fingerspell":false,"confidence":"high","how":"one plain sentence telling a learner how to sign it"}]}`;
+}
+function promptCheck(text,gloss){
+  return `${RULES}
+
+You are now the reviewer. A first draft of the ASL gloss is below. Review it strictly against the rules.
+
+English: "${text.replace(/"/g,"'")}"
+Draft gloss: ${JSON.stringify(gloss)}
+
+Tasks:
+1. Read the gloss back into natural English.
+2. Decide whether the original meaning is preserved.
+3. List real grammar problems against the rules. Return an empty list if there are none. Do not invent problems.
+4. Give the final gloss. Keep the draft unchanged if it is already good.
+
+Return JSON only, in exactly this shape:
+{"back_translation":"natural English","meaning_preserved":true,"issues":["short problem"],"final_gloss":["TOKEN","TOKEN"]}`;
+}
+function promptQuiz(){
+  return `Write 3 multiple-choice questions that help a beginner learn from this ASL translation.
+English: "${S.text.replace(/"/g,"'")}"
+ASL gloss: ${JSON.stringify(S.gloss)}
+Grammar changes made: ${JSON.stringify(S.changes)}
+Sign details: ${JSON.stringify(S.signs.map(x=>({gloss:x.gloss,handshape:x.handshape,location:x.location,movement:x.movement})))}
+
+Questions should test ASL grammar (word order, dropped words, question and negation placement) or the signs themselves. Give 4 options per question and exactly one correct option. "answer" is the 0-based index of the correct option. "why" is one short sentence.
+Return JSON only, in exactly this shape:
+{"questions":[{"q":"question text","options":["a","b","c","d"],"answer":0,"why":"short reason"}]}`;
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", x===b ? "true":"false"));
+    ["translate","eval","how"].forEach(t=>{ $("tab-"+t).hidden = (t!==b.dataset.tab); });
+  });
+});
+
+/* ---------- examples ---------- */
+const EXAMPLES = ["The doctor will help you now","I need help with the water","She gave the book to her brother","What is your name?","Yesterday my friend Maria went to school"];
+EXAMPLES.forEach(t=>{
+  const c=el("button",{class:"chip",type:"button",text:t});
+  c.addEventListener("click",()=>{ $("input").value=t; updateCount(); });
+  $("examples").append(c);
+});
+function updateCount(){ $("count").textContent = $("input").value.length+"/300"; }
+$("input").addEventListener("input",updateCount); updateCount();
+
+/* ---------- stage geometry ---------- */
+const ZONES = { forehead:[100,36], face:[100,56], chin:[100,79], neck:[100,98], shoulder:[140,114], chest:[100,142], belly:[100,188], neutral:[136,152], side:[158,192] };
+(function drawZones(){
+  const g=$("zones");
+  Object.keys(ZONES).forEach(k=>{
+    const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    c.setAttribute("cx",ZONES[k][0]); c.setAttribute("cy",ZONES[k][1]); c.setAttribute("r",4); c.setAttribute("class","zone");
+    g.append(c);
+  });
+})();
+function pos(loc,mv,t){
+  const base = ZONES[loc] || ZONES.neutral; let x=base[0], y=base[1], pulse=-1;
+  switch(mv){
+    case "tap": y = y - 7*Math.abs(Math.sin(3*Math.PI*t)); break;
+    case "forward": case "away": pulse=t; break;
+    case "toward": pulse=1-t; break;
+    case "arc": x = x + 38*t; y = y - 22*Math.sin(Math.PI*t); break;
+    case "circle": x = x + 15*Math.cos(2*Math.PI*t-Math.PI/2); y = y + 15*Math.sin(2*Math.PI*t-Math.PI/2)+15; break;
+    case "up": y = y + 14 - 30*t; break;
+    case "down": y = y - 14 + 30*t; break;
+    case "wiggle": x = x + 4*Math.sin(10*Math.PI*t); y = y + 3*Math.sin(6*Math.PI*t); break;
+    case "side-to-side": x = x + 22*Math.sin(2*Math.PI*t); break;
+    default: break;
+  }
+  return {x,y,pulse};
+}
+function setTrail(s){
+  const pts=[]; for(let i=0;i<=40;i++){ const p=pos(s.location,s.movement,i/40); pts.push(p.x.toFixed(1)+","+p.y.toFixed(1)); }
+  $("trail").setAttribute("points", ["hold","forward","away","toward","tap"].includes(s.movement) ? "" : pts.join(" "));
+}
+function drawHands(s,t){
+  const p=pos(s.location,s.movement,t);
+  $("handA").setAttribute("cx",p.x); $("handA").setAttribute("cy",p.y);
+  const two = Number(s.hands)===2;
+  $("handB").setAttribute("cx", two ? 200-p.x : -20); $("handB").setAttribute("cy", two ? p.y : -20);
+  const r=$("ring");
+  if(p.pulse>=0 && !s.fingerspell){
+    r.setAttribute("cx",p.x); r.setAttribute("cy",p.y); r.setAttribute("r",(7+16*p.pulse).toFixed(1)); r.setAttribute("opacity",(1-p.pulse*0.9).toFixed(2));
+  } else r.setAttribute("opacity","0");
+}
+
+/* ---------- state ---------- */
+const S = { text:"", gloss:[], changes:[], type:"", nmm:"", signs:[], check:null, turns:[], chatCtl:null, sel:0, playing:false, all:false, t0:0, raf:0, ctl:null };
+
+function setPill(n,state,label){ const p=$("p"+n); p.dataset.state=state; p.querySelector("span").textContent=label; }
+function resetPills(){ for(let i=1;i<=4;i++) setPill(i,"idle","Waiting"); }
+
+/* ---------- handshape library (drawn by code, chosen by the model) ---------- */
+// finger order: pinky, ring, middle, index. states: ext, curl, bent
+const HS = {
+  "A":{l:"A hand",f:["curl","curl","curl","curl"],t:"up"},
+  "S":{l:"S hand (fist)",f:["curl","curl","curl","curl"],t:"across"},
+  "B":{l:"B hand (flat hand)",f:["ext","ext","ext","ext"],t:"across"},
+  "5":{l:"5 hand (open hand)",f:["ext","ext","ext","ext"],t:"out",spread:1},
+  "1":{l:"1 hand (index finger)",f:["curl","curl","curl","ext"],t:"across"},
+  "L":{l:"L hand",f:["curl","curl","curl","ext"],t:"out"},
+  "Y":{l:"Y hand",f:["ext","curl","curl","curl"],t:"out"},
+  "I":{l:"I hand",f:["ext","curl","curl","curl"],t:"across"},
+  "V":{l:"V hand",f:["curl","curl","ext","ext"],t:"across",spread:1},
+  "W":{l:"W hand",f:["curl","ext","ext","ext"],t:"tuck",spread:1},
+  "3":{l:"3 hand",f:["curl","curl","ext","ext"],t:"out",spread:1},
+  "4":{l:"4 hand",f:["ext","ext","ext","ext"],t:"tuck",spread:1},
+  "ILY":{l:"I-love-you hand",f:["ext","curl","curl","ext"],t:"out",spread:1},
+  "HORNS":{l:"horns hand",f:["ext","curl","curl","ext"],t:"across",spread:1},
+  "X":{l:"X hand (hooked index)",nodraw:1},
+  "C":{l:"C hand",custom:1,approx:1},
+  "O":{l:"O hand",custom:1,approx:1},
+  "F":{l:"F hand",custom:1,approx:1},
+  "CLAW":{l:"claw hand",nodraw:1},
+  "BENT-B":{l:"bent flat hand",nodraw:1}
+};
+const HS_IDS = Object.keys(HS);
+const DIRS = ["up","down","left","right","forward","toward-body"];
+const PALMS = ["out","in","up","down","left","right"];
+function inferHS(t){
+  t=String(t||"").toLowerCase();
+  const rules=[[/claw|bent[- ]5/,"CLAW"],[/bent[- ]b|bent flat|flat.*bent/,"BENT-B"],[/love[- ]?you|\bily\b/,"ILY"],[/horn/,"HORNS"],
+    [/\bo[- ]hand|\bo handshape|fingertips? touch/,"O"],[/\bc[- ]hand|\bc handshape|curved/,"C"],[/\bl[- ]hand|\bl handshape/,"L"],
+    [/\by[- ]hand|\by handshape/,"Y"],[/\bi[- ]hand|\bi handshape|pinky/,"I"],[/\bv[- ]hand|\bv handshape|peace|\b2[- ]hand/,"V"],
+    [/\bw[- ]hand|\bw handshape/,"W"],[/\b3[- ]hand/,"3"],[/\b4[- ]hand/,"4"],[/\bf[- ]hand|\bf handshape/,"F"],[/\bx[- ]hand|hook/,"X"],
+    [/\b5[- ]hand|open hand|spread|open 5/,"5"],[/\b1[- ]hand|index|point/,"1"],[/\ba[- ]hand|\ba handshape/,"A"],
+    [/\bs[- ]hand|\bs handshape|fist/,"S"],[/\bb[- ]hand|\bb handshape|flat/,"B"]];
+  for(const [re,id] of rules) if(re.test(t)) return id;
+  return null;
+}
+function handSvg(id,dir,palm){
+  const h=HS[id], back=(palm==="in"), spread=!!h.spread;
+  const BY=124, FX=[78,93,108,123], LEN=[46,58,64,58], SP=[-14,-5,5,14], W=13;
+  const rot=({up:0,right:90,down:180,left:-90})[dir]||0;
+  const wrist=`<rect class="hp" x="84" y="186" width="36" height="32" rx="9"/>`;
+  const palmR=`<rect class="hp" x="70" y="120" width="62" height="72" rx="16"/>`;
+  const lines = back ? `<path class="hl" d="M78 130 H126"/>` : `<path class="hl" d="M80 170 Q101 178 124 168"/>`;
+  const ext=(i)=>{ const cx=FX[i], len=LEN[i]; return `<rect class="hp" x="${cx-W/2}" y="${BY-len}" width="${W}" height="${len+8}" rx="${W/2}"/>`; };
+  let inner="";
+  if(id==="O"){
+    inner = wrist+palmR+lines+`<circle class="hp" cx="101" cy="140" r="32"/><circle class="hhole" cx="101" cy="140" r="14"/>`;
+  }else if(id==="F"){
+    inner = wrist+ext(0)+ext(1)+ext(2)+`<circle class="hp" cx="128" cy="112" r="21"/>`+palmR+`<circle class="hhole" cx="128" cy="112" r="8"/>`+lines;
+  }else if(id==="C"){
+    const ring="M127 119 A32 32 0 1 0 127 161";
+    inner = wrist+palmR+lines+`<path class="cb" d="${ring}"/><path class="ci" d="${ring}"/>`;
+  }else{
+    let under="", over="", thumbUnder="", thumbOver="";
+    [0,1,2,3].forEach(i=>{
+      const cx=FX[i], st=h.f[i], a=spread?SP[i]:0, tr=`rotate(${a} ${cx} ${BY})`;
+      if(st==="ext") under+=`<g transform="${tr}">${ext(i)}</g>`;
+      else over+=`<rect class="hcurl" x="${cx-W/2}" y="${BY+2}" width="${W}" height="24" rx="${W/2}"/>`;
+    });
+    const t=h.t;
+    if(t==="out") thumbUnder=`<rect class="hp" x="117.5" y="134" width="13" height="56" rx="6.5" transform="rotate(52 124 184)"/>`;
+    else if(t==="up") thumbUnder=`<rect class="hp" x="121.5" y="130" width="13" height="62" rx="6.5" transform="rotate(6 128 186)"/>`;
+    else if(t==="across") thumbOver=`<rect class="hp" x="82" y="166" width="54" height="13" rx="6.5"/>`;
+    else if(t==="tuck") thumbOver=`<rect class="hp" x="98" y="160" width="26" height="13" rx="6.5" transform="rotate(-12 111 166)"/>`;
+    inner = wrist+thumbUnder+under+palmR+lines+over+thumbOver;
+  }
+  const mirror = back ? ` translate(202 0) scale(-1 1)` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" role="img" aria-label="Diagram of the ${h.l}"><g transform="rotate(${rot} 101 150)${mirror}">${inner}</g></svg>`;
+}
+function handNode(id,dir,palm){
+  const doc=new DOMParser().parseFromString(handSvg(id,dir,palm),"image/svg+xml");
+  return document.importNode(doc.documentElement,true);
+}
+
+/* ---------- normalization and repair ---------- */
+const LOCS=Object.keys(ZONES), MOVES=["tap","forward","away","toward","arc","circle","up","down","wiggle","hold","side-to-side"];
+function cleanTok(t){ return String(t).toUpperCase().replace(/[^A-Z0-9#\-]/g,"").replace(/^-+|-+$/g,""); }
+function normalizeGloss(g){
+  let arr = Array.isArray(g) ? g : String(g||"").split(/\s+/);
+  return arr.map(cleanTok).filter(Boolean);
+}
+function repairSigns(gloss, raw){
+  const list = Array.isArray(raw && raw.signs) ? raw.signs : [];
+  return gloss.map((tok,i)=>{
+    let m = list[i] && cleanTok(list[i].gloss)===tok ? list[i] : list.find(x=>x && cleanTok(x.gloss)===tok);
+    m = m || {};
+    const spell = tok[0]==="#" || m.fingerspell===true;
+    let hs = String(m.handshape_id||"").toUpperCase();
+    if(!HS[hs]) hs = inferHS(m.handshape) || "NONE";
+    if(spell) hs = "NONE";
+    const conf = ["high","medium","low"].includes(String(m.confidence).toLowerCase()) ? String(m.confidence).toLowerCase() : "medium";
+    return {
+      gloss: tok,
+      hands: Number(m.hands)===2 ? 2 : 1,
+      handshape: m.handshape ? String(m.handshape) : (spell ? "Manual alphabet" : "Not provided"),
+      hs,
+      dir: DIRS.includes(m.finger_direction) ? m.finger_direction : "up",
+      palm: PALMS.includes(m.palm) ? m.palm : "out",
+      orientation: m.orientation ? String(m.orientation) : "",
+      location: spell ? "neutral" : (LOCS.includes(m.location) ? m.location : "neutral"),
+      movement: spell ? "hold" : (MOVES.includes(m.movement) ? m.movement : "hold"),
+      nmm: m.nmm ? String(m.nmm) : "",
+      fingerspell: spell,
+      confidence: (hs==="NONE" && !spell) ? "low" : (m.how ? conf : "low"),
+      how: m.how ? String(m.how) : (spell ? "Spell the word one letter at a time with the manual alphabet." : "Details were not returned for this sign. Check a sign dictionary.")
+    };
+  });
+}
+
+/* ---------- translate ---------- */
+async function translate(){
+  const text=$("input").value.trim();
+  if(!text) return;
+  if(!sample){ showMsg("AI is not available here. Open this page from your Claude account to use it.","err"); return; }
+  S.ctl = new AbortController(); const signal=S.ctl.signal;
+  const tier=$("tier").value;
+  pausePlayback(); if(S.chatCtl) S.chatCtl.abort();
+  $("result").hidden=true; showMsg(""); resetPills();
+  S.signs=[]; S.check=null; S.turns=[]; $("chatlog").textContent=""; $("quizOut").textContent="";
+  $("go").disabled=true; $("stop").hidden=false;
+  let stage=1;
+  try{
+    setPill(1,"active","Reasoning about grammar");
+    const g = await sample.json(promptGloss(text),{signal,modelTier:tier});
+    let gloss = normalizeGloss(g && g.gloss);
+    if(!gloss.length) throw {code:"empty_completion"};
+    S.text=text; S.gloss=gloss;
+    S.changes = Array.isArray(g.rules_applied) ? g.rules_applied.map(String).slice(0,8) : [];
+    S.type = g.sentence_type ? String(g.sentence_type) : ""; S.nmm = g.nmm ? String(g.nmm) : "";
+    setPill(1,"done",gloss.length+" signs");
+    renderGloss();
+
+    stage=2;
+    if($("check").checked){
+      setPill(2,"active","Reviewing the gloss");
+      try{
+        const c = await sample.json(promptCheck(text,gloss),{signal,modelTier:tier});
+        const fg = normalizeGloss(c && c.final_gloss);
+        const revised = fg.length>0 && fg.join(" ")!==gloss.join(" ");
+        S.check = { back: c && c.back_translation ? String(c.back_translation) : "", ok: !(c && c.meaning_preserved===false),
+                    issues: Array.isArray(c && c.issues) ? c.issues.map(String).filter(Boolean).slice(0,6) : [], revised, before: gloss.slice() };
+        if(revised){ gloss=fg; S.gloss=fg; S.changes.push("Self-check revised the gloss from "+S.check.before.join(" ")+" to "+fg.join(" ")); }
+        setPill(2,"done",revised?"Revised":"Passed");
+      }catch(e){
+        if(e && e.code==="cancelled") throw e;
+        setPill(2,"error","Skipped");
+      }
+      renderGloss();
+    } else setPill(2,"idle","Off");
+
+    stage=3;
+    setPill(3,"active","Planning each sign");
+    const plan = await sample.json(promptPlan(text,gloss),{signal,modelTier:tier});
+    S.signs = repairSigns(gloss,plan); S.sel=0;
+    setPill(3,"done","Plan ready");
+
+    stage=4;
+    setPill(4,"active","Rendering");
+    renderResult();
+    setPill(4,"done","Ready to play");
+  }catch(e){
+    if(e && e.code==="cancelled"){ resetPills(); }
+    else{
+      setPill(stage,"error","Failed");
+      showMsg(errText(e),"err");
+      if(stage>=3 && S.gloss.length){ S.signs = repairSigns(S.gloss,null); renderResult(); }
+    }
+  }finally{
+    $("go").disabled=false; $("stop").hidden=true; S.ctl=null;
+  }
+}
+function showMsg(t,kind){ const m=$("msg"); m.textContent=""; if(t){ m.append(el("div",{class:"notice "+(kind||""),text:t,role:"alert"})); } }
+
+function renderGloss(){
+  $("result").hidden=false;
+  const gl=$("gloss"); gl.textContent="";
+  S.gloss.forEach((t,i)=>{
+    const b=el("button",{class:"tok",type:"button","aria-pressed":"false",text:t});
+    b.addEventListener("click",()=>{ if(S.signs.length){ select(i,true); } });
+    gl.append(b);
+  });
+  const ul=$("changes"); ul.textContent="";
+  S.changes.forEach(c=>ul.append(el("li",{text:c})));
+  if(S.type || S.nmm){ ul.append(el("li",{text:[S.type && ("Sentence type: "+S.type), S.nmm && ("Face and head: "+S.nmm)].filter(Boolean).join(". ")})); }
+  $("cards").textContent=""; $("detail").textContent="";
+  renderCheck();
+}
+function renderCheck(){
+  const c=$("checkOut"); c.textContent="";
+  if(!S.check){ c.hidden=true; return; }
+  c.hidden=false;
+  c.append(el("p",null, el("b",{text:"AI self-check"}), el("span",{class:"tag "+(S.check.revised?"rev":"ok"),text:S.check.revised?"Gloss revised":"Passed"})));
+  if(S.check.back) c.append(el("p",{text:"Read back into English: "+S.check.back}));
+  if(!S.check.ok) c.append(el("p",{text:"The reviewer thinks some of the meaning was lost."}));
+  if(S.check.issues.length){ const ul=el("ul"); S.check.issues.forEach(i=>ul.append(el("li",{text:i}))); c.append(ul); }
+}
+function renderResult(){
+  renderGloss();
+  const cards=$("cards");
+  S.signs.forEach((s,i)=>{
+    const c=el("button",{class:"card",type:"button","aria-pressed":"false"});
+    c.append(el("b",{text:s.gloss}), el("small",{text:s.fingerspell?"Fingerspelled":(s.handshape+(HS[s.hs]?" ("+s.hs+")":""))}), el("small",{text:s.fingerspell?"":(s.location+", "+s.movement)}));
+    c.addEventListener("click",()=>select(i,true));
+    cards.append(c);
+  });
+  select(0,false);
+}
+
+function select(i,play){
+  S.sel=i; S.all=false;
+  const s=S.signs[i]; if(!s) return;
+  document.querySelectorAll("#gloss .tok").forEach((b,k)=>b.setAttribute("aria-pressed",k===i?"true":"false"));
+  document.querySelectorAll("#cards .card").forEach((b,k)=>b.setAttribute("aria-pressed",k===i?"true":"false"));
+  setTrail(s); drawHands(s,0); renderDetail(s,0);
+  if(play) startPlayback(false); else pausePlayback();
+}
+function renderDetail(s,t){
+  const d=$("detail"); d.textContent="";
+  d.append(el("p",{class:"big",text:s.gloss}), el("p",{text:s.how}));
+  if(s.fingerspell){
+    const word=s.gloss.replace(/^#/,"").replace(/-/g,"");
+    const wrap=el("div",{class:"letters","aria-label":"Letters: "+word.split("").join(" ")});
+    word.split("").forEach(ch=>wrap.append(el("span",{text:ch})));
+    d.append(wrap);
+    d._letters=wrap;
+  } else d._letters=null;
+  const dl=el("dl",{class:"facts"});
+  const add=(k,v)=>{ if(v){ dl.append(el("dt",{text:k}), el("dd",{text:v})); } };
+  add("Handshape",s.handshape); add("Palm",s.orientation); add("Location",s.location);
+  add("Movement",s.movement); add("Hands",String(s.hands)); add("Face",s.nmm);
+  d.append(dl);
+  if(!s.fingerspell){
+    const box=el("div",{class:"hand"});
+    box.append(el("span",{class:"tag "+(s.confidence==="high"?"ok":(s.confidence==="low"?"low":"med")),text:"Model confidence: "+s.confidence}));
+    if(HS[s.hs] && !HS[s.hs].nodraw){
+      const h=HS[s.hs];
+      box.append(handNode(s.hs,s.dir,s.palm));
+      const notes=[h.l+", fingers "+s.dir+", palm "+s.palm+"."];
+      if(h.approx) notes.push("Stylised drawing; check a dictionary for the exact curve.");
+      if(["forward","toward-body"].includes(s.dir)) notes.push("Shown upright, but the fingers point "+s.dir.replace("-"," ")+".");
+      if(!["out","in"].includes(s.palm)) notes.push("Palm faces "+s.palm+"; shown from the front.");
+      box.append(el("small",{text:notes.join(" ")}));
+    } else box.append(el("small",{text:HS[s.hs] ? ("The model chose the "+HS[s.hs].l+", which has no diagram here. Follow the description above.") : "No standard handshape diagram fits this sign. Use the description above."}));
+    if(s.confidence==="low") box.append(el("small",{text:"Low confidence: check this sign in a dictionary before relying on it."}));
+    d.append(box);
+  }}
+
+/* ---------- playback ---------- */
+const dur = s => s.fingerspell ? Math.max(1400, 450*s.gloss.replace(/[^A-Z0-9]/g,"").length) : 1800;
+function startPlayback(all){
+  cancelAnimationFrame(S.raf); S.playing=true; S.all=all; S.t0=performance.now();
+  if(reduceMotion){ // no animation: step through signs on a timer instead
+    drawHands(S.signs[S.sel],0.5); if(all) stepStatic(); return;
+  }
+  const loop=(now)=>{
+    if(!S.playing) return;
+    const s=S.signs[S.sel], d=dur(s), el_=now-S.t0;
+    if(S.all && el_>=d){
+      if(S.sel<S.signs.length-1){ S.sel++; S.t0=now; highlight(S.sel); } else { pausePlayback(); return; }
+    }
+    const cur=S.signs[S.sel], t=((now-S.t0)%1600)/1600;
+    drawHands(cur,t);
+    const L=$("detail")._letters;
+    if(L){ const n=L.children.length, idx=Math.min(n-1,Math.floor(((now-S.t0)/dur(cur))*n)); [...L.children].forEach((c,k)=>c.classList.toggle("on",k===idx)); }
+    S.raf=requestAnimationFrame(loop);
+  };
+  S.raf=requestAnimationFrame(loop);
+}
+function stepStatic(){
+  setTimeout(()=>{ if(!S.playing) return; if(S.sel<S.signs.length-1){ S.sel++; highlight(S.sel); drawHands(S.signs[S.sel],0.5); stepStatic(); } else pausePlayback(); },1800);
+}
+function highlight(i){
+  const s=S.signs[i]; setTrail(s); renderDetail(s,0);
+  document.querySelectorAll("#gloss .tok").forEach((b,k)=>b.setAttribute("aria-pressed",k===i?"true":"false"));
+  document.querySelectorAll("#cards .card").forEach((b,k)=>b.setAttribute("aria-pressed",k===i?"true":"false"));
+}
+function pausePlayback(){ S.playing=false; cancelAnimationFrame(S.raf); }
+
+/* ---------- export ---------- */
+async function save(filename,obj){
+  if(!downloads){ showMsg("Saving files is not available in this view.","err"); return; }
+  try{ await downloads.save({filename,data:JSON.stringify(obj,null,2)}); }
+  catch(e){ if(!e || e.code!=="cancelled") showMsg("The file was not saved.","err"); }
+}
+
+/* ---------- evaluation ---------- */
+const TESTS = [
+ ["The doctor will help you now","NOW DOCTOR HELP YOU"],
+ ["I need help with the water","ME NEED HELP WATER"],
+ ["She gave the book to her brother","BOOK IX-3 GIVE BROTHER"],
+ ["We are going to the store","WE GO STORE"],
+ ["The teacher will see you tomorrow","TOMORROW TEACHER SEE YOU"],
+ ["What is your name?","YOUR NAME WHAT"],
+ ["Where is the bathroom?","BATHROOM WHERE"],
+ ["I do not understand","ME UNDERSTAND NOT"],
+ ["Yesterday I went to school","YESTERDAY ME GO SCHOOL"],
+ ["Do you want some coffee?","YOU WANT COFFEE"],
+ ["My mother is cooking dinner","MY MOTHER COOK DINNER"],
+ ["Please wait here for the nurse","PLEASE WAIT HERE NURSE"],
+ ["I am very happy to meet you","ME HAPPY MEET YOU"],
+ ["He does not like cold weather","COLD WEATHER IX-3 LIKE NOT"],
+ ["When does the class start?","CLASS START WHEN"]
+];
+const FMT = `Return JSON only, in exactly this shape: {"results":[{"id":1,"gloss":["TOKEN","TOKEN"]}]}. Include one result for every sentence, using its id.`;
+const sentenceList = ()=>TESTS.map((t,i)=>(i+1)+". "+t[0]).join("\n");
+const STRATS = {
+  plain: { name:"Plain prompt", prompt:()=>`Convert each English sentence into ASL gloss (uppercase tokens).\n\n${sentenceList()}\n\n${FMT}` },
+  rules: { name:"Rules and examples", prompt:()=>`${RULES}\n\nConvert each of these sentences:\n${sentenceList()}\n\n${FMT}` }
+};
+const tokensOf = s => normalizeGloss(s);
+function f1(pred,ref){
+  const c={}; ref.forEach(t=>c[t]=(c[t]||0)+1);
+  let hit=0; pred.forEach(t=>{ if(c[t]>0){ hit++; c[t]--; } });
+  if(!hit) return 0;
+  const p=hit/pred.length, r=hit/ref.length; return 2*p*r/(p+r);
+}
+function lcsRatio(a,b){
+  const dp=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
+  for(let i=1;i<=a.length;i++) for(let j=1;j<=b.length;j++) dp[i][j]= a[i-1]===b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j],dp[i][j-1]);
+  return Math.max(a.length,b.length) ? dp[a.length][b.length]/Math.max(a.length,b.length) : 0;
+}
+let evalCtl=null, evalData=null;
+async function judgeAll(out,signal,tier){
+  const flip=i=>i%2===1; // alternate order so the judge cannot favour a fixed position
+  const items=TESTS.map((t,i)=>{
+    const a=out.plain.rows[i].pred.join(" ")||"(none)", b=out.rules.rows[i].pred.join(" ")||"(none)";
+    const [x,y]=flip(i)?[b,a]:[a,b];
+    return (i+1)+'. English: "'+t[0]+'" | X: '+x+' | Y: '+y;
+  }).join("\n");
+  const prompt=`You are a fluent ASL interpreter acting as a strict judge. For each item, score two candidate ASL glosses, X and Y, from 1 (wrong meaning or unnatural English word order) to 5 (natural ASL word order and the full meaning preserved). Judge grammar (time first, articles and be-verbs dropped, question words last, negation after the verb) and meaning. Be critical and use the whole range.
+
+${items}
+
+Return JSON only, in exactly this shape: {"scores":[{"id":1,"x":4,"y":5}]}`;
+  const r=await sample.json(prompt,{signal,modelTier:tier});
+  const by={}; (r && Array.isArray(r.scores) ? r.scores : []).forEach(v=>{ if(v) by[v.id]=v; });
+  const ok=n=>Number.isFinite(n)&&n>=1&&n<=5;
+  const plain=[],rules=[];
+  TESTS.forEach((_,i)=>{ const v=by[i+1]||{}; const x=Number(v.x), y=Number(v.y); const [pa,ru]=flip(i)?[y,x]:[x,y]; plain.push(ok(pa)?pa:null); rules.push(ok(ru)?ru:null); });
+  return {plain,rules};
+}
+async function runEval(){
+  if(!sample){ $("evalStatus").textContent="AI is not available here."; return; }
+  evalCtl=new AbortController(); const signal=evalCtl.signal, tier=$("tier").value;
+  $("runEval").disabled=true; $("stopEval").hidden=false; $("exportEval").hidden=true; $("evalOut").hidden=true;
+  const out={};
+  try{
+    const keys=Object.keys(STRATS);
+    for(const key of keys){
+      $("evalStatus").textContent="Running: "+STRATS[key].name+" ("+(keys.indexOf(key)+1)+" of 3). This can take a minute.";
+      const t0=performance.now();
+      const r=await sample.json(STRATS[key].prompt(),{signal,modelTier:tier});
+      const ms=performance.now()-t0;
+      const byId={}; (r && Array.isArray(r.results) ? r.results : []).forEach(x=>{ if(x) byId[x.id]=tokensOf(x.gloss); });
+      out[key]={ms, rows:TESTS.map((t,i)=>{
+        const pred=byId[i+1]||[], ref=tokensOf(t[1]);
+        return {pred, f1:f1(pred,ref), lcs:lcsRatio(pred,ref), exact: pred.length>0 && pred.join(" ")===ref.join(" ")};
+      })};
+    }
+    evalData=out; renderEval(out);
+    $("evalStatus").textContent="Running: AI judge (3 of 3). This can take a minute.";
+    try{ out.judge=await judgeAll(out,signal,tier); renderEval(out); $("evalStatus").textContent="Done."; }
+    catch(e){ if(e && e.code==="cancelled") throw e; $("evalStatus").textContent="Done. The AI judge step failed, so only the code-based scores are shown."; }
+    $("exportEval").hidden=false;
+  }catch(e){
+    $("evalStatus").textContent = e && e.code==="cancelled" ? "Stopped." : errText(e);
+    if(out.plain && out.rules){ evalData=out; renderEval(out); $("exportEval").hidden=false; }
+  }finally{
+    $("runEval").disabled=false; $("stopEval").hidden=true; evalCtl=null;
+  }
+}
+const pct = x => Math.round(x*100)+"%";
+const avg = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : 0;
+function renderEval(out){
+  $("evalOut").hidden=false;
+  const sum=$("evalSummary"); sum.textContent="";
+  const metrics=[
+    ["Token overlap",k=>avg(out[k].rows.map(r=>r.f1)),pct],
+    ["Word order",k=>avg(out[k].rows.map(r=>r.lcs)),pct],
+    ["Exact match",k=>out[k].rows.filter(r=>r.exact).length/TESTS.length,pct]
+  ];
+  if(out.judge){ metrics.push(["AI judge",k=>avg(out.judge[k].filter(v=>v!==null))/5,v=>(v*5).toFixed(1)+"/5"]); }
+  const card=el("div",{class:"sumcard"}); card.append(el("h3",{text:"Scores across "+TESTS.length+" sentences"}));
+  metrics.forEach(([name,fn,fmt])=>{
+    ["plain","rules"].forEach(k=>{
+      const v=fn(k);
+      const bar=el("div",{class:"bar"+(k==="plain"?" b":"")}); const i=el("i"); bar.append(i);
+      card.append(el("div",{class:"meter"}, el("span",{text:(k==="plain"?"Plain":"Rules")+": "+name}), bar, el("span",{class:"num",text:fmt(v)})));
+      requestAnimationFrame(()=>{ i.style.width=Math.round(v*100)+"%"; });
+    });
+  });
+  sum.append(card);
+  const t=el("div",{class:"sumcard"}); t.append(el("h3",{text:"Reading the results"}));
+  ["plain","rules"].forEach(k=>t.append(el("p",{text:STRATS[k].name+": "+(out[k].ms/1000).toFixed(1)+" s for "+TESTS.length+" sentences in one call"})));
+  const lift=avg(out.rules.rows.map(r=>r.f1))-avg(out.plain.rows.map(r=>r.f1));
+  t.append(el("p",{text:"Adding grammar rules and examples changed token overlap by "+(lift>=0?"+":"")+Math.round(lift*100)+" points. Yellow bars are the plain prompt; blue bars add rules and examples."}));
+  t.append(el("p",{text:out.judge ? "The AI judge scored both outputs blind, with the order alternated between sentences." : "The AI judge scores will appear here when the third call finishes."}));
+  sum.append(t);
+
+  const tb=$("evalTable"); tb.textContent="";
+  const head=el("tr"); ["English","Reference gloss","Plain prompt","Rules and examples"].forEach(h=>head.append(el("th",{text:h}))); tb.append(el("thead",null,head));
+  const body=el("tbody");
+  TESTS.forEach((t,i)=>{
+    const cell=(k)=>{
+      const r=out[k].rows[i], j=out.judge ? out.judge[k][i] : null;
+      return el("td",{class:"m"}, r.pred.join(" ")||"(no output)", el("br"), el("span",{class:r.f1>=0.8?"good":(r.f1<0.5?"poor":""),text:"F1 "+pct(r.f1)+(r.exact?", exact":"")+(j?", judge "+j+"/5":"")}));
+    };
+    body.append(el("tr",null, el("td",{text:t[0]}), el("td",{class:"m",text:t[1]}), cell("plain"), cell("rules")));
+  });
+  tb.append(body);
+}
+
+/* ---------- ASL tutor chat ---------- */
+function tutorContext(){
+  return `You are a friendly, honest ASL tutor helping a hearing beginner. Answer in plain language in under 120 words. If something varies by region or you are not sure, say so instead of guessing. Do not invent facts about specific signs.
+The student is looking at this translation:
+English: "${S.text.replace(/"/g,"'")}"
+ASL gloss: ${JSON.stringify(S.gloss)}
+Sentence type: ${S.type||"unknown"}. Face and head: ${S.nmm||"none given"}.
+Grammar changes made: ${JSON.stringify(S.changes)}
+Sign details: ${JSON.stringify(S.signs.map(x=>({gloss:x.gloss,handshape:x.handshape,handshape_id:x.hs,orientation:x.orientation,location:x.location,movement:x.movement,face:x.nmm})))}
+The conversation follows. Answer the latest question.`;
+}
+function addMsg(kind,text){ const m=el("div",{class:"msgrow "+kind,text}); $("chatlog").append(m); return m; }
+async function askTutor(q){
+  q=(q||"").trim();
+  if(!sample || !q || !S.gloss.length || S.chatCtl) return;
+  $("chatin").value="";
+  S.turns.push({role:"user",content:q}); addMsg("u",q);
+  const bubble=addMsg("a","Thinking...");
+  S.chatCtl=new AbortController();
+  $("chatsend").disabled=true; $("chatstop").hidden=false;
+  try{
+    const r=await sample([{role:"user",content:tutorContext()},...S.turns],{cache:false,signal:S.chatCtl.signal,modelTier:$("tier").value,onText:({text})=>{ bubble.textContent=text; }});
+    S.turns.push({role:"assistant",content:r.text}); bubble.textContent=r.text;
+  }catch(e){
+    S.turns.pop();
+    const partial = e && e.text ? e.text : "";
+    bubble.textContent = e && e.code==="cancelled" ? (partial||"Stopped.") : (partial ? partial+"\n\n" : "")+errText(e);
+  }finally{
+    S.chatCtl=null; $("chatsend").disabled=false; $("chatstop").hidden=true;
+  }
+}
+
+/* ---------- AI practice quiz ---------- */
+async function makeQuiz(){
+  if(!sample || !S.gloss.length) return;
+  const box=$("quizOut"); box.textContent="Writing questions..."; $("quizBtn").disabled=true;
+  try{
+    const r=await sample.json(promptQuiz(),{modelTier:$("tier").value,cache:false});
+    const qs=(r && Array.isArray(r.questions) ? r.questions : []).filter(q=>q && q.q && Array.isArray(q.options) && q.options.length>=2 && Number.isInteger(q.answer) && q.answer>=0 && q.answer<q.options.length).slice(0,3);
+    if(!qs.length) throw {code:"empty_completion"};
+    box.textContent="";
+    qs.forEach((q,qi)=>{
+      const blk=el("div",{class:"qblock"}); blk.append(el("p",{text:(qi+1)+". "+q.q}));
+      const out=el("p",{class:"why"}); const btns=[];
+      q.options.forEach((o,oi)=>{
+        const b=el("button",{class:"opt",type:"button",text:String(o)}); btns.push(b);
+        b.addEventListener("click",()=>{
+          btns.forEach((x,xi)=>{ x.disabled=true; if(xi===q.answer) x.dataset.r="right"; });
+          if(oi!==q.answer) b.dataset.r="wrong";
+          out.textContent=(oi===q.answer?"Correct. ":"Not quite. ")+(q.why?String(q.why):"");
+        });
+        blk.append(b);
+      });
+      blk.append(out); box.append(blk);
+    });
+  }catch(e){ box.textContent=errText(e); }
+  finally{ $("quizBtn").disabled=false; }
+}
+const SUG=["Why does the time word come first?","What facial expression goes with this sentence?","How would the gloss change in the past tense?"];
+SUG.forEach(t=>{ const c=el("button",{class:"chip",type:"button",text:t}); c.addEventListener("click",()=>askTutor(t)); $("chatsug").append(c); });
+
+/* ---------- wire up ---------- */
+$("go").addEventListener("click",translate);
+$("input").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)) translate(); });
+$("stop").addEventListener("click",()=>{ if(S.ctl) S.ctl.abort(); });
+$("playAll").addEventListener("click",()=>{ if(!S.signs.length) return; S.sel=0; highlight(0); startPlayback(true); });
+$("pause").addEventListener("click",pausePlayback);
+$("export").addEventListener("click",()=>save("glossa-translation.json",{english:S.text,gloss:S.gloss,sentence_type:S.type,rules_applied:S.changes,nmm:S.nmm,signs:S.signs}));
+$("chatsend").addEventListener("click",()=>askTutor($("chatin").value));
+$("chatin").addEventListener("keydown",e=>{ if(e.key==="Enter") askTutor($("chatin").value); });
+$("chatstop").addEventListener("click",()=>{ if(S.chatCtl) S.chatCtl.abort(); });
+$("quizBtn").addEventListener("click",makeQuiz);
+$("runEval").addEventListener("click",runEval);
+$("stopEval").addEventListener("click",()=>{ if(evalCtl) evalCtl.abort(); });
+$("exportEval").addEventListener("click",()=>{ if(!evalData) return; save("glossa-evaluation.json",{tests:TESTS.map((t,i)=>({english:t[0],reference:t[1],plain:evalData.plain.rows[i],rules:evalData.rules.rows[i]})),latency_ms:{plain:evalData.plain.ms,rules:evalData.rules.ms},ai_judge_scores:evalData.judge||null}); });
+
+(async function init(){
+  try{
+    if(window.claude && window.claude.use){
+      sample = await window.claude.use("sample");
+      downloads = await window.claude.use("downloads");
+    }
+  }catch(e){ sample=null; }
+  if(!sample){
+    showMsg("AI features need this page to be opened from your Claude account. You can still read how it works.","");
+    $("go").disabled=true; $("runEval").disabled=true;
+  }
+  if(!downloads){ $("export").hidden=true; $("exportEval").dataset.nodl="1"; }
+})();
+})();
+</script>
+<script>
+(function(){
+  var st = window.__glossaStandalone; if(!st) return;
+  var bar=document.getElementById("keybar"), inp=document.getElementById("apikey"), btn=document.getElementById("savekey");
+  bar.hidden=false; if(st.getKey()){ inp.value=st.getKey(); }
+  btn.addEventListener("click",function(){ st.setKey(inp.value.trim()); btn.textContent="Saved"; setTimeout(function(){btn.textContent="Save for this tab";},1500); });
+})();
+</script>
+</body>
+</html>
