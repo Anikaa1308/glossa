@@ -6,7 +6,7 @@ const MODELS = {
   default: "gemini-3.8-flash",
 };
 // Tried in order when Google answers 503 (overloaded). All are on the free tier.
-const FALLBACK = "gemini-3.1-flash-lite";
+const FALLBACKS = [MODELS.quick, "gemini-3.1-flash-lite"];
 
 const MAX_TURNS = 40;
 const MAX_CHARS = 200000;
@@ -72,7 +72,8 @@ module.exports = async (req, res) => {
   const payload = { contents, generationConfig: { maxOutputTokens: 8192 } };
   if (body.json === true) payload.generationConfig.responseMimeType = "application/json";
 
-  const order = [model, model, FALLBACK].filter((m, i, a) => i === 1 || a.indexOf(m) === i);
+  // Same model twice, then the fallbacks, skipping repeats.
+  const order = [model, model].concat(FALLBACKS.filter((m) => m !== model));
   let upstream;
   for (let i = 0; i < order.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 1500));
