@@ -162,67 +162,123 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
 <script>
 /* ===== Standalone runtime (GitHub Pages build) =====
    Inside Claude the page gets window.claude from the viewer. On GitHub Pages it does not,
-   so this shim provides the same two capabilities ("sample" and "downloads") using the
-   Anthropic Messages API called straight from the browser with the user's own API key.
-   The key is kept in this tab's sessionStorage only and is sent only to api.anthropic.com. */
+   so this shim provides the same two capabilities ("sample" and "downloads") by calling a
+   model API straight from the browser with the user's own key. Two providers are supported:
+   Google Gemini (free tier, no card) and Anthropic (paid). Keys live in this tab's
+   sessionStorage only and are sent only to the chosen provider. */
 (function(){
   if (window.claude) return;
-  var MODELS = { quick: "claude-haiku-4-5-20251001", default: "claude-sonnet-5-5", complex: "claude-sonnet-5-5" };
-  var KEY_NAME = "glossa_api_key";
-  function getKey(){ try{ return sessionStorage.getItem(KEY_NAME)||""; }catch(e){ return ""; } }
-  function setKey(k){ try{ sessionStorage.setItem(KEY_NAME,k); }catch(e){} }
+  var PROVIDERS = {
+    proxy:    { label:"Glossa server", models:{ quick:"gemini-2.5-flash-lite", default:"gemini-2.5-flash", complex:"gemini-2.5-flash" } },
+    gemini:   { label:"Google Gemini (free tier)", models:{ quick:"gemini-2.5-flash-lite", default:"gemini-2.5-flash", complex:"gemini-2.5-flash" } },
+    anthropic:{ label:"Anthropic (paid)", models:{ quick:"claude-haiku-4-5-20251001", default:"claude-sonnet-5-5", complex:"claude-sonnet-5-5" } }
+  };
+  function ss(k,v){ try{ if(v===undefined) return sessionStorage.getItem(k)||""; sessionStorage.setItem(k,v); return v; }catch(e){ return ""; } }
+  function provider(){ return "proxy"; }
+  function getKey(){ return "server"; }
+  function setKey(k){ ss("glossa_key_"+provider(),k); }
+  function setProvider(p){ if(PROVIDERS[p]) ss("glossa_provider",p); }
   function err(code,message,text){ var e={code:code,message:message}; if(text) e.text=text; return e; }
+  function sleep(ms,signal){ return new Promise(function(res,rej){ var t=setTimeout(res,ms); if(signal) signal.addEventListener("abort",function(){ clearTimeout(t); rej(err("cancelled","Aborted")); }); }); }
+  async function errBody(res){ try{ var eb=await res.json(); return eb && eb.error && eb.error.message ? eb.error.message : ""; }catch(x){ return ""; } }
 
-  async function call(input, opts){
-    opts = opts||{};
-    var key = getKey();
-    if(!key) throw err("not_granted","No API key set");
-    var messages = typeof input==="string" ? [{role:"user",content:input}] : input.map(function(t){return {role:t.role,content:t.content};});
-    // merge consecutive same-role turns (the app sends a context turn followed by the user's turn)
-    var merged=[]; messages.forEach(function(m){ var l=merged[merged.length-1]; if(l && l.role===m.role) l.content+="\n\n"+m.content; else merged.push({role:m.role,content:m.content}); });
-    var body = { model: MODELS[opts.modelTier]||MODELS.default, max_tokens: 4096, messages: merged, stream: !!opts.onText };
+  async function readSse(res, onEvent, text0){
+    var reader=res.body.getReader(), dec=new TextDecoder(), buf="";
+    for(;;){
+      var r=await reader.read(); if(r.done) break;
+      buf+=dec.decode(r.value,{stream:true});
+      var lines=buf.split("\n"); buf=lines.pop();
+      for(var i=0;i<lines.length;i++){
+        var ln=lines[i].trim(); if(ln.indexOf("data:")!==0) continue;
+        var d=ln.slice(5).trim(); if(!d||d==="[DONE]") continue;
+        var ev; try{ ev=JSON.parse(d); }catch(x){ continue; }
+        onEvent(ev);
+      }
+    }
+  }
+
+  async function callAnthropic(merged, opts, key){
+    var model = PROVIDERS.anthropic.models[opts.modelTier]||PROVIDERS.anthropic.models.default;
     var res;
     try{
       res = await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST", signal: opts.signal,
         headers:{ "content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ model:model, max_tokens:4096, messages:merged, stream:!!opts.onText })
       });
-    }catch(e){
-      if(e && e.name==="AbortError") throw err("cancelled","Aborted");
-      throw err("upstream_error","Network error: "+(e&&e.message));
-    }
+    }catch(e){ if(e && e.name==="AbortError") throw err("cancelled","Aborted"); throw err("upstream_error","Network error: "+(e&&e.message)); }
     if(!res.ok){
       var code = res.status===401||res.status===403 ? "not_granted" : res.status===429 ? "rate_limited" : res.status===413 ? "prompt_too_large" : "upstream_error";
-      throw err(code,"HTTP "+res.status);
+      var detail=await errBody(res);
+      throw err(code,"HTTP "+res.status+(detail?": "+detail:""));
     }
     var text="", truncated=false;
     if(!opts.onText){
-      var data = await res.json();
-      text = (data.content||[]).map(function(b){return b.type==="text"?b.text:"";}).join("");
-      truncated = data.stop_reason==="max_tokens";
+      var data=await res.json();
+      text=(data.content||[]).map(function(b){return b.type==="text"?b.text:"";}).join("");
+      truncated=data.stop_reason==="max_tokens";
     }else{
-      var reader=res.body.getReader(), dec=new TextDecoder(), buf="";
       try{
-        for(;;){
-          var r=await reader.read(); if(r.done) break;
-          buf+=dec.decode(r.value,{stream:true});
-          var lines=buf.split("\n"); buf=lines.pop();
-          for(var i=0;i<lines.length;i++){
-            var ln=lines[i].trim(); if(ln.indexOf("data:")!==0) continue;
-            var d=ln.slice(5).trim(); if(!d||d==="[DONE]") continue;
-            var ev; try{ ev=JSON.parse(d); }catch(x){ continue; }
-            if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){ text+=ev.delta.text; opts.onText({text:text,delta:ev.delta.text}); }
-            if(ev.type==="message_delta" && ev.delta && ev.delta.stop_reason==="max_tokens") truncated=true;
-          }
-        }
-      }catch(e){
-        if(e && e.name==="AbortError") throw err("cancelled","Aborted",text);
-        throw err("upstream_error","Stream interrupted",text);
-      }
+        await readSse(res,function(ev){
+          if(ev.type==="content_block_delta" && ev.delta && ev.delta.type==="text_delta"){ text+=ev.delta.text; opts.onText({text:text,delta:ev.delta.text}); }
+          if(ev.type==="message_delta" && ev.delta && ev.delta.stop_reason==="max_tokens") truncated=true;
+        });
+      }catch(e){ if(e && e.name==="AbortError") throw err("cancelled","Aborted",text); throw err("upstream_error","Stream interrupted",text); }
     }
-    if(!text.trim()) throw err("empty_completion","Empty answer");
-    return { text:text, truncated:truncated, modelTierApplied: opts.modelTier||"default" };
+    return { text:text, truncated:truncated };
+  }
+
+  async function callGemini(merged, opts, key){
+    var model = PROVIDERS.gemini.models[opts.modelTier]||PROVIDERS.gemini.models.default;
+    var stream=!!opts.onText;
+    var proxy = provider()==="proxy";
+    var url = proxy ? "/api/generate" : "https://generativelanguage.googleapis.com/v1beta/models/"+model+(stream?":streamGenerateContent?alt=sse":":generateContent");
+    var body={ contents: merged.map(function(m){ return { role:m.role==="assistant"?"model":"user", parts:[{text:m.content}] }; }), generationConfig:{ maxOutputTokens:8192 } };
+    if(opts._json) body.generationConfig.responseMimeType="application/json";
+    var res;
+    try{
+      res = proxy
+        ? await fetch(url,{ method:"POST", signal:opts.signal, headers:{ "content-type":"application/json" }, body:JSON.stringify({ tier:opts.modelTier||"default", stream:stream, json:!!opts._json, contents:body.contents }) })
+        : await fetch(url,{ method:"POST", signal:opts.signal, headers:{ "content-type":"application/json","x-goog-api-key":key }, body:JSON.stringify(body) });
+    }catch(e){ if(e && e.name==="AbortError") throw err("cancelled","Aborted"); throw err("upstream_error","Network error: "+(e&&e.message)); }
+    if(!res.ok){
+      var detail=await errBody(res), low=detail.toLowerCase();
+      var code = (res.status===401||res.status===403||(res.status===400 && low.indexOf("api key")>=0)) ? "not_granted" : res.status===429 ? "rate_limited" : res.status===413 ? "prompt_too_large" : "upstream_error";
+      throw err(code,"HTTP "+res.status+(detail?": "+detail:""));
+    }
+    var text="", truncated=false;
+    function take(ev){
+      var c=ev.candidates && ev.candidates[0];
+      if(!c){ if(ev.promptFeedback && ev.promptFeedback.blockReason) throw err("refused","Blocked: "+ev.promptFeedback.blockReason); return; }
+      var parts=(c.content && c.content.parts) || [], add=parts.map(function(p){return p.text||"";}).join("");
+      if(add){ text+=add; if(stream) opts.onText({text:text,delta:add}); }
+      if(c.finishReason==="MAX_TOKENS") truncated=true;
+      if(c.finishReason==="SAFETY" && !text) throw err("refused","Blocked by safety filter");
+    }
+    if(!stream){ take(await res.json()); }
+    else{
+      try{ await readSse(res,take); }
+      catch(e){ if(e && e.code) throw e; if(e && e.name==="AbortError") throw err("cancelled","Aborted",text); throw err("upstream_error","Stream interrupted",text); }
+    }
+    return { text:text, truncated:truncated };
+  }
+
+  async function call(input, opts){
+    opts = opts||{};
+    var key=getKey();
+    if(!key) throw err("not_granted","No API key set");
+    var messages = typeof input==="string" ? [{role:"user",content:input}] : input.map(function(t){return {role:t.role,content:t.content};});
+    var merged=[]; messages.forEach(function(m){ var l=merged[merged.length-1]; if(l && l.role===m.role) l.content+="\n\n"+m.content; else merged.push({role:m.role,content:m.content}); });
+    var p=provider(), r;
+    try{
+      r = (p==="gemini"||p==="proxy") ? await callGemini(merged,opts,key) : await callAnthropic(merged,opts,key);
+    }catch(e){
+      // Free-tier limits are low: wait once and retry before giving up.
+      if(e && e.code==="rate_limited" && (p==="gemini"||p==="proxy") && !opts._retried){ await sleep(15000,opts.signal); return call(input, Object.assign({},opts,{_retried:true})); }
+      throw e;
+    }
+    if(!r.text.trim()) throw err("empty_completion","Empty answer");
+    return { text:r.text, truncated:r.truncated, modelTierApplied: opts.modelTier||"default" };
   }
 
   function parseJson(text){
@@ -236,7 +292,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
   }
 
   var sample = function(input,opts){ return call(input,opts); };
-  sample.json = async function(input,opts){ var r=await call(input,opts); return parseJson(r.text); };
+  sample.json = async function(input,opts){ var r=await call(input,Object.assign({},opts,{_json:true})); return parseJson(r.text); };
   sample.limits = async function(){ return { maxPromptBytes: 262144 }; };
 
   var downloads = { save: async function(req){
@@ -247,7 +303,7 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
   }};
 
   window.claude = { use: async function(name){ return name==="sample" ? sample : (name==="downloads" ? downloads : null); } };
-  window.__glossaStandalone = { getKey:getKey, setKey:setKey, models:MODELS };
+  window.__glossaStandalone = { getKey:getKey, setKey:setKey, provider:provider, setProvider:setProvider, providers:PROVIDERS };
 })();
 </script>
 <div class="wrap">
@@ -257,12 +313,6 @@ code{font-family:var(--mono);font-size:.88em;background:var(--surface2);padding:
     <p class="lede">ASL has its own grammar, so a word-for-word swap gets it wrong. Glossa uses generative AI to restructure the sentence into ASL gloss, then plans each sign's handshape, location and movement and plays it back.</p>
   </header>
 
-  <div class="keybar" id="keybar" hidden>
-    <label for="apikey"><b>Anthropic API key</b></label>
-    <input type="password" id="apikey" autocomplete="off" placeholder="sk-ant-..." aria-describedby="keynote">
-    <button class="btn" id="savekey" type="button">Save for this tab</button>
-    <small id="keynote">Your key stays in this browser tab (sessionStorage) and is sent only to api.anthropic.com. It is never stored on a server or in the repository. Use a key with a low spending limit.</small>
-  </div>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" aria-selected="true" data-tab="translate">Translate</button>
     <button role="tab" aria-selected="false" data-tab="eval">Evaluate</button>
@@ -422,7 +472,7 @@ const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: r
 let sample=null, downloads=null;
 
 const ERR_COPY = {
-  not_granted:"The AI request was refused. Check that your API key is saved above and valid, or allow access if you are in Claude.",
+  not_granted:"The server refused the request. If you run this site yourself, check the GEMINI_API_KEY setting in Vercel.",
   sampling_disabled:"Claude is not available for this account.",
   not_declared:"This page is missing its AI permission.",
   capability_disabled:"AI is not available in this view.",
@@ -434,7 +484,7 @@ const ERR_COPY = {
   prompt_too_large:"That input is too long.",
   upstream_error:"The AI service had a temporary problem. Try again."
 };
-const errText = (e)=> (e && ERR_COPY[e.code]) || "Something went wrong. Try again.";
+const errText = (e)=>{ const base=(e && ERR_COPY[e.code]) || "Something went wrong. Try again."; return (e && e.message && /^(HTTP|Network)/.test(e.message)) ? base+" Details: "+e.message : base; };
 
 /* ---------- prompts ---------- */
 const RULES = `You are an ASL linguist. Convert English to ASL gloss.
@@ -1113,13 +1163,6 @@ $("exportEval").addEventListener("click",()=>{ if(!evalData) return; save("gloss
 })();
 })();
 </script>
-<script>
-(function(){
-  var st = window.__glossaStandalone; if(!st) return;
-  var bar=document.getElementById("keybar"), inp=document.getElementById("apikey"), btn=document.getElementById("savekey");
-  bar.hidden=false; if(st.getKey()){ inp.value=st.getKey(); }
-  btn.addEventListener("click",function(){ st.setKey(inp.value.trim()); btn.textContent="Saved"; setTimeout(function(){btn.textContent="Save for this tab";},1500); });
-})();
 </script>
 </body>
 </html>

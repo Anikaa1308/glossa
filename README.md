@@ -1,81 +1,57 @@
 # Glossa
 
-**English to ASL, grammar first.** Glossa is a single-page web app that uses generative AI to turn an English sentence into American Sign Language (ASL) gloss, plan how each sign is produced, and preview it.
+**English to ASL, grammar first.** Glossa turns an English sentence into American Sign Language (ASL) gloss with generative AI, checks its own work, plans each sign, and previews it. Visitors need **no account and no key**.
 
-> Mini project: *An End-to-End Generative AI Application for English-to-ASL Translation and Learning.*
+Mini project: *An End-to-End Generative AI Application for English-to-ASL Translation and Learning.*
 
-## Why
+## How the key stays private
 
-ASL is not English with hands. It puts time first, drops articles and "to be" verbs, puts question words last and puts negation after the verb. A word-for-word swap gets it wrong, so Glossa translates grammar first and motion second.
+The page never sees an API key. It sends requests to `/api/generate`, a small serverless function (`api/generate.js`) that holds the Google Gemini key in a Vercel environment variable and forwards the request. The function only accepts requests from its own site, limits each visitor address, caps input size, and only allows two fixed models.
 
-## What it does
-
-| Stage | What happens | Generative AI? |
-|---|---|---|
-| 1. Gloss | A rules-and-examples prompt turns English into ASL gloss, with a list of the changes made | Yes |
-| 2. Self-check | A reviewer call reads the gloss back into English, checks meaning, and repairs the gloss | Yes |
-| 3. Sign planning | For each sign the model picks a standard handshape, direction, location, movement, facial expression and a confidence level | Yes |
-| 4. Preview | Code draws the chosen handshape and moves a dot through signing space | No (code) |
-
-Also included: a streaming **ASL tutor chat** that knows the current translation, an AI-written **practice quiz**, and an **Evaluate** tab that compares a plain prompt with a rules-and-examples prompt using code-based scores (token F1, word-order match, exact match) and an AI judge with alternating order to reduce position bias.
-
-The model **chooses** handshapes from a library of 20 standard ASL shapes defined in code; code draws them. Letting a model draw hands freehand gave unreliable shapes.
-
-## Use it
-
-**Live page:** `https://Anikaa1308.github.io/glossa/` (after you deploy, see below)
-
-1. Open the page and paste an Anthropic API key into the key box, then press **Save for this tab**.
-2. Type a sentence and press **Translate**. Use **Fast** mode for demos.
-
-The key stays in your browser tab (`sessionStorage`) and is sent only to `api.anthropic.com`. It is never stored in this repository or on a server. Use a key with a low spending limit, and never commit a key.
-
-## Run locally
-
-No build step.
-
-```bash
-git clone https://github.com/Anikaa1308/glossa.git
-cd glossa
-python3 -m http.server 8000   # then open http://localhost:8000
+```
+index.html  --->  /api/generate  --->  Google Gemini
+(no key)          (holds the key)
 ```
 
-## Deploy to GitHub Pages
+## Deploy (free)
 
-1. Create an empty repository on GitHub.
-2. Push these files to the `main` branch:
-   ```bash
-   git init
-   git add .
-   git commit -m "Glossa: English to ASL with generative AI"
-   git branch -M main
-   git remote add origin https://github.com/Anikaa1308/glossa.git
-   git push -u origin main
-   ```
-3. In the repository go to **Settings, Pages**, and set **Source** to **GitHub Actions**.
-4. The included workflow (`.github/workflows/pages.yml`) publishes the site. The URL appears in the **Actions** tab and under **Settings, Pages**.
+1. **Get a free Gemini key:** <https://aistudio.google.com/apikey> (any Google account, no card).
+2. **Put these files in your GitHub repo** (`Anikaa1308/glossa`):
+   - `index.html` (replace the old one)
+   - `api/generate.js` (in GitHub use **Add file, Create new file**, type `api/generate.js` as the name, paste the contents)
+   - `vercel.json`
+3. **Import the repo in Vercel:** <https://vercel.com/new>, choose the repo, leave Framework Preset as **Other**.
+4. **Add the key before deploying:** open **Environment Variables**, set Name `GEMINI_API_KEY`, Value = your key, then click **Deploy**.
+5. Open the `.vercel.app` address Vercel gives you.
+
+If you add or change the variable after deploying, go to **Deployments** and **Redeploy** so it takes effect.
+
+GitHub Pages cannot run server code, so this version is hosted on Vercel only. If you already enabled GitHub Pages or uploaded the `.github` folder, ignore them or delete them.
+
+## Limits and honesty
+
+- Google's free tier allows only about 5 to 10 requests a minute across **all** visitors, and one translation uses three requests. If the page seems slow it is waiting and retrying once; heavy use will hit the limit.
+- On the free tier Google may use prompts to improve its models. Do not enter personal information.
+- Anyone with the link uses your free quota. The per-visitor limit is best effort. If the link is abused, delete the key in Google AI Studio and make a new one.
+- The preview is a **schematic**, not video of a signer. Sign details come from a language model and can be wrong; check a sign dictionary.
+- Gloss is a written approximation and cannot show facial grammar or speed.
+- Handshapes X, claw and bent flat hand have no diagram; C, O and F are stylised.
+- Reference glosses in the Evaluate tab were written for this project and have not been checked by a fluent signer.
+- Built without Deaf community input so far.
+
+## Files
+
+```
+index.html          the whole front end (HTML, CSS, JavaScript)
+api/generate.js     serverless function that holds the key
+vercel.json         allows the function up to 60 seconds
+README.md  LICENSE  .gitignore
+```
 
 ## Models
 
-Defined in `index.html` in the `MODELS` object of the standalone runtime. Fast mode uses `claude-haiku-4-5-20251001`; Accurate mode uses `claude-sonnet-5-5`. Edit them if you want different models.
-
-## Repository layout
-
-```
-index.html                    the whole app (HTML, CSS, JavaScript, no dependencies)
-.github/workflows/pages.yml   GitHub Pages deployment
-README.md  LICENSE  .gitignore  .nojekyll
-```
-
-## Limitations
-
-- The preview is a **schematic**, not video of a signer. Sign details come from a language model and can be wrong; check a sign dictionary before relying on them.
-- Gloss is a written approximation. It cannot show facial grammar, body shift or speed, which carry meaning in ASL.
-- Handshapes X, claw and bent flat hand have no diagram. C, O and F are stylised.
-- Reference glosses in the Evaluate tab were written for this project; real ASL often has several valid glosses. Replace them with references checked by a fluent signer or a published corpus before reporting final numbers.
-- Calling a model API directly from a browser exposes the key to the person using the page. For a public deployment, put a small proxy in front of the API instead.
-- Built without Deaf community input so far. A real deployment should involve Deaf signers.
+Set in `api/generate.js`: Fast uses `gemini-2.5-flash-lite`, Accurate uses `gemini-2.5-flash`. Model names change over time; if you see a model-not-found error under **Details** on the page, update the names there and redeploy.
 
 ## License
 
-MIT, see `LICENSE`. Replace the copyright line with your name or team.
+MIT, see `LICENSE`.
