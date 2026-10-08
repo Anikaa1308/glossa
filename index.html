@@ -742,7 +742,9 @@ function normalizeGloss(g){
   return arr.map(cleanTok).filter(Boolean);
 }
 function repairSigns(gloss, raw){
-  const list = Array.isArray(raw && raw.signs) ? raw.signs : [];
+  // Accept {signs:[...]}, a bare array of signs, or an array of {signs:[...]} (newer models sometimes nest it).
+  const top = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.signs) ? raw.signs : []);
+  const list = [].concat(...top.map(x => x && Array.isArray(x.signs) ? x.signs : [x]));
   return gloss.map((tok,i)=>{
     let m = list[i] && cleanTok(list[i].gloss)===tok ? list[i] : list.find(x=>x && cleanTok(x.gloss)===tok);
     m = m || {};
